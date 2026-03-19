@@ -1,6 +1,6 @@
 import { Outlet, Navigate } from 'react-router-dom'
-import { Sidebar } from '../components/layout/Sidebar'
-import { useAuth } from '../context/AuthContext'
+import { Sidebar } from './Sidebar'
+import { useAuth } from '../../context/AuthContext'
 
 export function AppLayout() {
   const { session, loading } = useAuth()

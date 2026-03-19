@@ -382,10 +382,10 @@ export default function ConnectionsPage() {
               )}
 
               {/* Diagnostics */}
-              {result.match_quality_diagnostics && Object.keys(result.match_quality_diagnostics).length > 0 && (
+              {result.match_quality_diagnostics != null && Object.keys(result.match_quality_diagnostics).length > 0 ? (
                 <div className="space-y-1.5">
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Signal diagnostics</p>
-                  {Object.entries(result.match_quality_diagnostics).map(([key, val]) => (
+                  {Object.entries(result.match_quality_diagnostics).map(([key, val]: [string, string]) => (
                     <div key={key} className="flex items-center justify-between text-xs">
                       <span className="text-gray-600 capitalize">{key.replace(/_/g, ' ')}</span>
                       <span className={clsx(
@@ -397,7 +397,7 @@ export default function ConnectionsPage() {
                     </div>
                   ))}
                 </div>
-              )}
+              ) : null}
 
               {/* Key IDs */}
               {result.success && (
@@ -427,7 +427,7 @@ export default function ConnectionsPage() {
               )}
 
               {/* Raw toggle */}
-              {result.raw_response && (
+              {result.raw_response != null ? (
                 <div>
                   <button
                     onClick={() => setShowRaw(p => !p)}
@@ -445,7 +445,7 @@ export default function ConnectionsPage() {
                     </pre>
                   )}
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </section>
