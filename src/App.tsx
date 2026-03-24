@@ -8,6 +8,7 @@ import InfluencersPage from './pages/Influencers/InfluencersPage'
 import SettingsPage from './pages/Settings/SettingsPage'
 import SignInPage from './pages/AuthPages/SignInPage'
 import SignUpPage from './pages/AuthPages/SignUpPage'
+import ResetPasswordPage from './pages/AuthPages/ResetPasswordPage'
 
 export default function App() {
   return (
@@ -26,6 +27,7 @@ export default function App() {
           {/* Auth */}
           <Route path="signin" element={<SignInPage />} />
           <Route path="signup" element={<SignUpPage />} />
+          <Route path="reset-password" element={<ResetPasswordPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,146 +1,181 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '../../components/common/PageHeader'
-import { apiPost } from '../../lib/api'
-import type { CapiTestResult } from '../../types'
+import { useAuth } from '../../context/AuthContext'
+import { apiFetch, apiPost, apiDelete } from '../../lib/api'
+import { API } from '../../lib/api'
+import type { ApiConnection, CapiTestResult } from '../../types'
 import clsx from 'clsx'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Platform config ─────────────────────────────────────────────────────────
 
-type EventType = 'PageView' | 'Purchase'
-type VerifyState = 'idle' | 'loading' | 'ok' | 'error'
-type SendState = 'idle' | 'loading' | 'success' | 'error'
-
-interface MetaCredentials {
-  pixel_id: string
-  access_token: string
-  test_event_code: string
+interface PlatformDef {
+  key: string
+  name: string
+  auth: 'paste' | 'oauth'
+  color: string
+  bgColor: string
+  borderColor: string
+  fields: { key: string; label: string; placeholder: string; required?: boolean }[]
+  icon: React.ReactNode
 }
+
+const PLATFORMS: PlatformDef[] = [
+  {
+    key: 'meta', name: 'Meta', auth: 'paste', color: 'text-blue-700', bgColor: 'bg-blue-50', borderColor: 'border-blue-100',
+    fields: [
+      { key: 'platform_account_id', label: 'Pixel ID', placeholder: '123456789012345', required: true },
+      { key: 'access_token', label: 'Access Token', placeholder: 'EAAG...', required: true },
+      { key: 'secondary_id', label: 'Test Event Code (optional)', placeholder: 'TEST12345' },
+    ],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>,
+  },
+  {
+    key: 'tiktok', name: 'TikTok', auth: 'oauth', color: 'text-purple-700', bgColor: 'bg-purple-50', borderColor: 'border-purple-100',
+    fields: [],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="#000"><path d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.88-2.88 2.89 2.89 0 012.88-2.88c.28 0 .56.04.82.12V9.01a6.34 6.34 0 00-.82-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.34-6.34V8.87a8.2 8.2 0 004.77 1.52V6.94a4.85 4.85 0 01-1.01-.25z"/></svg>,
+  },
+  {
+    key: 'linkedin', name: 'LinkedIn', auth: 'oauth', color: 'text-blue-800', bgColor: 'bg-blue-50', borderColor: 'border-blue-100',
+    fields: [],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="#0A66C2"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>,
+  },
+  {
+    key: 'google', name: 'Google (GA4 + Ads)', auth: 'oauth', color: 'text-green-700', bgColor: 'bg-green-50', borderColor: 'border-green-100',
+    fields: [],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>,
+  },
+  {
+    key: 'snapchat', name: 'Snapchat', auth: 'paste', color: 'text-amber-700', bgColor: 'bg-amber-50', borderColor: 'border-amber-100',
+    fields: [
+      { key: 'platform_account_id', label: 'Pixel ID', placeholder: 'snap-pixel-id', required: true },
+      { key: 'access_token', label: 'Access Token', placeholder: 'Bearer token', required: true },
+    ],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="#FFFC00"><path d="M12.206.793c.99 0 4.347.276 5.93 3.821.529 1.193.403 3.219.299 4.847l-.003.06c-.012.18-.022.345-.03.51.075.045.203.09.401.09.3-.016.659-.12.98-.278a.71.71 0 01.322-.077.63.63 0 01.585.39.636.636 0 01-.104.66c-.14.18-.4.39-.92.62-.16.07-.38.15-.63.24l-.03.012c-.9.345-1.168.691-1.102 1.02.09.45.577.72.937.89l.043.02c.578.295 1.12.601 1.312 1.044a.86.86 0 01.009.665c-.36.87-1.86 1.47-4.594 1.834-.18.03-.21.15-.24.3l-.015.09c-.06.39-.12.81-.36 1.2-.36.585-1.08.84-1.74.84-.39 0-.78-.09-1.14-.24l-.03-.015c-.48-.21-1.02-.45-1.74-.45-.45 0-.93.09-1.38.27l-.03.015c-.36.15-.72.255-1.14.255-.66 0-1.38-.255-1.74-.84-.24-.39-.3-.81-.36-1.2l-.015-.09c-.03-.15-.06-.27-.24-.3-2.73-.36-4.23-.96-4.59-1.83a.87.87 0 01.009-.665c.19-.44.734-.75 1.312-1.044l.043-.02c.36-.17.847-.44.937-.89.066-.33-.202-.675-1.102-1.02l-.03-.012c-.24-.09-.47-.17-.63-.24-.52-.23-.78-.44-.92-.62a.636.636 0 01-.104-.66.63.63 0 01.585-.39.71.71 0 01.322.077c.32.16.68.264.98.278.198 0 .326-.045.4-.09-.007-.165-.017-.33-.03-.51l-.002-.06c-.104-1.628-.23-3.654.3-4.847C7.447 1.069 10.804.793 11.794.793h.412z"/></svg>,
+  },
+  {
+    key: 'reddit', name: 'Reddit', auth: 'paste', color: 'text-orange-700', bgColor: 'bg-orange-50', borderColor: 'border-orange-100',
+    fields: [
+      { key: 'platform_account_id', label: 'Pixel ID', placeholder: 't2_xxxxx', required: true },
+      { key: 'access_token', label: 'Access Token', placeholder: 'Bearer token', required: true },
+    ],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="#FF4500"><path d="M12 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0zm5.01 4.744c.688 0 1.25.561 1.25 1.249a1.25 1.25 0 01-2.498.056l-2.597-.547-.8 3.747c1.824.07 3.48.632 4.674 1.488.308-.309.73-.491 1.207-.491.968 0 1.754.786 1.754 1.754 0 .716-.435 1.333-1.01 1.614a3.111 3.111 0 01.042.52c0 2.694-3.13 4.87-7.004 4.87-3.874 0-7.004-2.176-7.004-4.87 0-.183.015-.366.043-.534A1.748 1.748 0 014.028 12c0-.968.786-1.754 1.754-1.754.463 0 .898.196 1.207.49 1.207-.883 2.878-1.43 4.744-1.487l.885-4.182a.342.342 0 01.14-.197.35.35 0 01.238-.042l2.906.617a1.214 1.214 0 011.108-.701zM9.25 12C8.561 12 8 12.562 8 13.25c0 .687.561 1.248 1.25 1.248.687 0 1.248-.561 1.248-1.249 0-.688-.561-1.249-1.249-1.249zm5.5 0c-.687 0-1.248.561-1.248 1.25 0 .687.561 1.248 1.249 1.248.688 0 1.249-.561 1.249-1.249 0-.687-.562-1.249-1.25-1.249zm-5.466 3.99a.327.327 0 00-.231.094.33.33 0 000 .463c.842.842 2.484.913 2.961.913.477 0 2.105-.056 2.961-.913a.361.361 0 000-.462.342.342 0 00-.465 0c-.533.533-1.684.784-2.504.784-.82 0-1.958-.236-2.491-.784a.326.326 0 00-.231-.095z"/></svg>,
+  },
+  {
+    key: 'pinterest', name: 'Pinterest', auth: 'paste', color: 'text-red-700', bgColor: 'bg-red-50', borderColor: 'border-red-100',
+    fields: [
+      { key: 'platform_account_id', label: 'Ad Account ID', placeholder: '549755812345', required: true },
+      { key: 'access_token', label: 'Access Token', placeholder: 'pina_...', required: true },
+    ],
+    icon: <svg width="18" height="18" viewBox="0 0 24 24" fill="#E60023"><path d="M12.017 0C5.396 0 .029 5.367.029 11.987c0 5.079 3.158 9.417 7.618 11.162-.105-.949-.199-2.403.041-3.439.219-.937 1.406-5.957 1.406-5.957s-.359-.72-.359-1.781c0-1.668.967-2.914 2.171-2.914 1.023 0 1.518.769 1.518 1.69 0 1.029-.655 2.568-.994 3.995-.283 1.194.599 2.169 1.777 2.169 2.133 0 3.772-2.249 3.772-5.495 0-2.873-2.064-4.882-5.012-4.882-3.414 0-5.418 2.561-5.418 5.207 0 1.031.397 2.138.893 2.738a.36.36 0 01.083.345l-.333 1.36c-.053.22-.174.267-.402.161-1.499-.698-2.436-2.889-2.436-4.649 0-3.785 2.75-7.262 7.929-7.262 4.163 0 7.398 2.967 7.398 6.931 0 4.136-2.607 7.464-6.227 7.464-1.216 0-2.359-.631-2.75-1.378l-.748 2.853c-.271 1.043-1.002 2.35-1.492 3.146C9.57 23.812 10.763 24 12.017 24c6.624 0 11.988-5.37 11.988-11.992C24.005 5.366 18.641 0 12.017 0z"/></svg>,
+  },
+]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function ScoreDot({ score }: { score: number }) {
-  const color =
-    score >= 7 ? 'bg-emerald-500' :
-    score >= 4 ? 'bg-amber-400' :
-    'bg-red-400'
-  return <span className={clsx('inline-block w-2 h-2 rounded-full mr-1.5', color)} />
+function StatusBadge({ conn }: { conn: ApiConnection }) {
+  if (!conn.enabled) return <span className="badge-idle"><span className="w-1.5 h-1.5 rounded-full bg-gray-400" />Paused</span>
+  if (conn.status === 'active') return <span className="badge-live"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Live</span>
+  if (conn.status === 'expiring') return <span className="badge-warn"><span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Expiring</span>
+  return <span className="badge-error"><span className="w-1.5 h-1.5 rounded-full bg-red-500" />{conn.status}</span>
 }
 
-function ScoreBar({ score }: { score: number }) {
-  const pct = (score / 10) * 100
-  const color = score >= 7 ? 'bg-emerald-500' : score >= 4 ? 'bg-amber-400' : 'bg-red-400'
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={clsx('h-full rounded-full transition-all duration-500', color)} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-sm font-semibold tabular-nums w-6">{score}</span>
-    </div>
-  )
-}
-
-function StatusBadge({ state, label }: { state: VerifyState; label?: string }) {
-  if (state === 'idle') return null
-  if (state === 'loading') return (
-    <span className="badge-idle">
-      <span className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />
-      Checking…
-    </span>
-  )
-  if (state === 'ok') return (
-    <span className="badge-live">
-      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-      {label || 'Token valid'}
-    </span>
-  )
-  return (
-    <span className="badge-error">
-      <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-      {label || 'Failed'}
-    </span>
-  )
-}
-
-// ─── Main component ───────────────────────────────────────────────────────────
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export default function ConnectionsPage() {
-  const [creds, setCreds] = useState<MetaCredentials>({
-    pixel_id: '',
-    access_token: '',
-    test_event_code: '',
-  })
+  const { org } = useAuth()
+  const [connections, setConnections] = useState<ApiConnection[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandedPlatform, setExpandedPlatform] = useState<string | null>(null)
+  const [formData, setFormData] = useState<Record<string, string>>({})
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
 
-  const [verifyState, setVerifyState] = useState<VerifyState>('idle')
-  const [verifyLabel, setVerifyLabel] = useState('')
+  // Meta test console state
+  const [testCreds, setTestCreds] = useState({ pixel_id: '', access_token: '', test_event_code: '' })
+  const [testResult, setTestResult] = useState<CapiTestResult | null>(null)
+  const [testLoading, setTestLoading] = useState(false)
+  const [showTestConsole, setShowTestConsole] = useState(false)
 
-  const [eventType, setEventType] = useState<EventType>('PageView')
-  const [purchaseValue, setPurchaseValue] = useState('29.99')
-  const [currency, setCurrency] = useState('USD')
-  const [sendState, setSendState] = useState<SendState>('idle')
-
-  const [result, setResult] = useState<CapiTestResult | null>(null)
-  const [showRaw, setShowRaw] = useState(false)
-
-  const credsFilled = creds.pixel_id.trim() && creds.access_token.trim()
-
-  // ── Verify token ────────────────────────────────────────────────────────────
-  async function handleVerify() {
-    if (!credsFilled) return
-    setVerifyState('loading')
-    setResult(null)
+  async function fetchConnections() {
+    if (!org) return
     try {
-      const res = await apiPost<{ valid: boolean; pixel_name?: string; error?: string }>(
-        '/connections/meta/verify',
-        { pixel_id: creds.pixel_id, access_token: creds.access_token }
-      )
-      if (res.valid) {
-        setVerifyState('ok')
-        setVerifyLabel(res.pixel_name ? `Token valid · ${res.pixel_name}` : 'Token valid')
-      } else {
-        setVerifyState('error')
-        setVerifyLabel(res.error || 'Invalid token or pixel ID')
-      }
-    } catch (e: unknown) {
-      setVerifyState('error')
-      setVerifyLabel(e instanceof Error ? e.message : 'Verification failed')
-    }
+      const data = await apiFetch<ApiConnection[]>(`/v1/orgs/${org.id}/connections`)
+      setConnections(data)
+    } catch { /* ignore */ }
+    setLoading(false)
   }
 
-  // ── Send test event ─────────────────────────────────────────────────────────
-  async function handleSendEvent() {
-    if (!credsFilled) return
-    setSendState('loading')
-    setResult(null)
-    try {
-      const payload = {
-        pixel_id: creds.pixel_id,
-        access_token: creds.access_token,
-        event_name: eventType,
-        test_event_code: creds.test_event_code || undefined,
-        ...(eventType === 'Purchase' ? { value: parseFloat(purchaseValue), currency } : {}),
-      }
-      const res = await apiPost<CapiTestResult>('/connections/meta/test-event', payload)
-      setResult(res)
-      setSendState(res.success ? 'success' : 'error')
-    } catch (e: unknown) {
-      setResult({ success: false, event_id: '', error: e instanceof Error ? e.message : 'Unknown error' })
-      setSendState('error')
-    }
+  useEffect(() => { fetchConnections() }, [org])
+
+  function getConnection(platform: string): ApiConnection | undefined {
+    return connections.find(c => c.platform === platform && c.status !== 'disconnected')
   }
 
-  // ── Save connection ─────────────────────────────────────────────────────────
-  async function handleSave() {
-    if (!credsFilled || verifyState !== 'ok') return
+  async function handlePasteConnect(platformKey: string) {
+    if (!org) return
+    setSaving(true)
+    setSaveError('')
     try {
-      await apiPost('/connections', {
-        platform: 'meta',
-        pixel_id: creds.pixel_id,
-        access_token: creds.access_token,
+      await apiPost(`/v1/orgs/${org.id}/connections/token`, {
+        platform: platformKey,
+        platform_account_id: formData.platform_account_id || '',
+        platform_account_label: formData.platform_account_label || undefined,
+        secondary_id: formData.secondary_id || undefined,
       })
-      alert('Meta CAPI connection saved.')
+      setExpandedPlatform(null)
+      setFormData({})
+      await fetchConnections()
     } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Save failed')
+      setSaveError(e instanceof Error ? e.message : 'Save failed')
     }
+    setSaving(false)
+  }
+
+  function handleOAuthConnect(platformKey: string) {
+    if (!org) return
+    window.location.href = `${API}/v1/oauth/${platformKey}/connect?org_id=${org.id}`
+  }
+
+  async function handleToggle(conn: ApiConnection) {
+    if (!org) return
+    try {
+      await apiFetch(`/v1/orgs/${org.id}/connections/${conn.id}/toggle`, { method: 'PATCH' })
+      await fetchConnections()
+    } catch { /* ignore */ }
+  }
+
+  async function handleDisconnect(conn: ApiConnection) {
+    if (!org) return
+    if (!confirm(`Disconnect ${conn.platform}? This will remove the access token.`)) return
+    try {
+      await apiDelete(`/v1/orgs/${org.id}/connections/${conn.id}`)
+      await fetchConnections()
+    } catch { /* ignore */ }
+  }
+
+  async function handleMetaTestEvent() {
+    setTestLoading(true)
+    setTestResult(null)
+    try {
+      const res = await apiPost<CapiTestResult>('/connections/meta/test-event', {
+        pixel_id: testCreds.pixel_id,
+        access_token: testCreds.access_token,
+        event_name: 'PageView',
+        test_event_code: testCreds.test_event_code || undefined,
+      })
+      setTestResult(res)
+    } catch (e: unknown) {
+      setTestResult({ success: false, event_id: '', error: e instanceof Error ? e.message : 'Failed' })
+    }
+    setTestLoading(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <span className="w-5 h-5 border-2 border-brand-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
   }
 
   return (
@@ -150,323 +185,185 @@ export default function ConnectionsPage() {
         description="Connect your ad platforms to enable server-side CAPI attribution."
       />
 
-      <div className="px-6 pb-10 space-y-6 max-w-3xl">
+      <div className="px-6 pb-10 space-y-6 max-w-4xl">
 
-        {/* ── Meta CAPI card ─────────────────────────────────────────────── */}
-        <section className="card space-y-5">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="#1877F2">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                </svg>
-              </div>
-              <div>
-                <h2 className="text-sm font-semibold text-gray-900">Meta Conversions API</h2>
-                <p className="text-xs text-gray-400">Server-side event forwarding to Meta Pixel</p>
-              </div>
-            </div>
-            <StatusBadge state={verifyState} label={verifyLabel} />
-          </div>
+        {/* ── Platform grid ──────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-3">
+          {PLATFORMS.map(p => {
+            const conn = getConnection(p.key)
+            const isExpanded = expandedPlatform === p.key && !conn
 
-          <div className="border-t border-gray-100" />
-
-          {/* Credentials */}
-          <div className="space-y-4">
-            <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Credentials</h3>
-
-            <div>
-              <label className="input-label">Pixel ID</label>
-              <input
-                className="input"
-                placeholder="Enter your Meta Pixel ID"
-                value={creds.pixel_id}
-                onChange={e => setCreds(p => ({ ...p, pixel_id: e.target.value }))}
-              />
-            </div>
-
-            <div>
-              <label className="input-label">Access Token</label>
-              <div className="relative">
-                <input
-                  className="input pr-10"
-                  type="password"
-                  placeholder="EAAxxxxxxxxxxxxxxxxxxxxxxxx"
-                  value={creds.access_token}
-                  onChange={e => setCreds(p => ({ ...p, access_token: e.target.value }))}
-                />
-                <svg className="absolute right-3 top-2.5 text-gray-300" width="14" height="14" viewBox="0 0 16 16" fill="none">
-                  <rect x="4" y="7" width="8" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M5.5 7V5a2.5 2.5 0 015 0v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                </svg>
-              </div>
-              <p className="mt-1 text-xs text-gray-400">
-                Generate from Meta Business Manager → Data Sources → Pixels → Settings → Conversions API
-              </p>
-            </div>
-
-            <div>
-              <label className="input-label">Test Event Code <span className="normal-case font-normal text-gray-400">(optional)</span></label>
-              <input
-                className="input"
-                placeholder="TEST12345"
-                value={creds.test_event_code}
-                onChange={e => setCreds(p => ({ ...p, test_event_code: e.target.value }))}
-              />
-              <p className="mt-1 text-xs text-gray-400">
-                From Meta Events Manager → Test Events tab. Lets you see events in real time without affecting production data.
-              </p>
-            </div>
-          </div>
-
-          {/* Verify */}
-          <div className="flex items-center gap-3 pt-1">
-            <button
-              className={clsx('btn-secondary', !credsFilled && 'opacity-40 cursor-not-allowed')}
-              onClick={handleVerify}
-              disabled={!credsFilled || verifyState === 'loading'}
-            >
-              {verifyState === 'loading' ? (
-                <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.2"/>
-                  <path d="M4.5 7l2 2 3-3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-              Verify token
-            </button>
-
-            <button
-              className={clsx('btn-primary', (verifyState !== 'ok') && 'opacity-40 cursor-not-allowed')}
-              onClick={handleSave}
-              disabled={verifyState !== 'ok'}
-            >
-              Save connection
-            </button>
-          </div>
-        </section>
-
-        {/* ── Test event sender ──────────────────────────────────────────── */}
-        <section className="card space-y-5">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">Test Event Console</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Send test events and inspect Meta's match quality score response</p>
-          </div>
-
-          <div className="border-t border-gray-100" />
-
-          {/* Event type selector */}
-          <div>
-            <label className="input-label">Event type</label>
-            <div className="flex gap-2">
-              {(['PageView', 'Purchase'] as EventType[]).map(type => (
-                <button
-                  key={type}
-                  onClick={() => setEventType(type)}
-                  className={clsx(
-                    'px-4 py-2 rounded-lg text-sm font-medium border transition-colors',
-                    eventType === type
-                      ? 'bg-brand-50 border-brand-200 text-brand-700'
-                      : 'bg-white border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-50'
-                  )}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Purchase fields */}
-          {eventType === 'Purchase' && (
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="input-label">Value</label>
-                <input
-                  className="input"
-                  placeholder="29.99"
-                  value={purchaseValue}
-                  onChange={e => setPurchaseValue(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="input-label">Currency</label>
-                <select
-                  className="input"
-                  value={currency}
-                  onChange={e => setCurrency(e.target.value)}
-                >
-                  {['USD', 'EUR', 'GBP', 'CAD', 'AUD'].map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-
-          {/* Send button */}
-          <button
-            className={clsx('btn-primary w-full justify-center', !credsFilled && 'opacity-40 cursor-not-allowed')}
-            onClick={handleSendEvent}
-            disabled={!credsFilled || sendState === 'loading'}
-          >
-            {sendState === 'loading' ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                Sending…
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M1 7l12-6-6 12-1.5-5.5L1 7z" fill="currentColor" opacity=".8"/>
-                </svg>
-                Send {eventType} event
-              </>
-            )}
-          </button>
-
-          {/* Results panel */}
-          {result && (
-            <div className={clsx(
-              'rounded-xl border p-4 space-y-4',
-              result.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
-            )}>
-              {/* Status row */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {result.success ? (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="7" fill="#10b981"/>
-                        <path d="M5 8l2.5 2.5L11 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                      <span className="text-sm font-semibold text-emerald-800">Event received</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                        <circle cx="8" cy="8" r="7" fill="#ef4444"/>
-                        <path d="M5.5 5.5l5 5M10.5 5.5l-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                      </svg>
-                      <span className="text-sm font-semibold text-red-800">Event failed</span>
-                    </>
-                  )}
+            return (
+              <div key={p.key} className={clsx('card space-y-3', conn && 'border-emerald-200')}>
+                {/* Header row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={clsx('w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0', p.bgColor, p.borderColor)}>
+                      {p.icon}
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900">{p.name}</h3>
+                      <p className="text-[11px] text-gray-400">
+                        {p.auth === 'oauth' ? 'OAuth' : 'API token'} · {conn ? 'Connected' : 'Not connected'}
+                      </p>
+                    </div>
+                  </div>
+                  {conn ? <StatusBadge conn={conn} /> : null}
                 </div>
-                {result.latency_ms && (
-                  <span className="text-xs text-gray-500 font-mono">{result.latency_ms}ms</span>
+
+                {/* Connected state */}
+                {conn && (
+                  <>
+                    <div className="border-t border-gray-100" />
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <p className="text-gray-400">Events fired</p>
+                        <p className="font-semibold text-gray-800 mt-0.5">{conn.total_events_fired.toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Last event</p>
+                        <p className="text-gray-600 mt-0.5">{conn.last_event_at ? new Date(conn.last_event_at).toLocaleDateString() : '—'}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400">Account</p>
+                        <p className="text-gray-600 mt-0.5 truncate font-mono text-[11px]">{conn.platform_account_id || '—'}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleToggle(conn)}
+                        className={clsx('text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors',
+                          conn.enabled
+                            ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        )}
+                      >
+                        {conn.enabled ? 'Pause' : 'Enable'}
+                      </button>
+                      <button
+                        onClick={() => handleDisconnect(conn)}
+                        className="text-xs px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 font-medium transition-colors"
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {/* Not connected — show connect button */}
+                {!conn && !isExpanded && (
+                  <button
+                    onClick={() => {
+                      if (p.auth === 'oauth') {
+                        handleOAuthConnect(p.key)
+                      } else {
+                        setExpandedPlatform(p.key)
+                        setFormData({})
+                        setSaveError('')
+                      }
+                    }}
+                    className="btn-primary text-xs w-full justify-center"
+                  >
+                    {p.auth === 'oauth' ? `Connect with ${p.name}` : `Connect ${p.name}`}
+                  </button>
+                )}
+
+                {/* Paste-token form (expanded) */}
+                {isExpanded && (
+                  <>
+                    <div className="border-t border-gray-100" />
+                    <div className="space-y-3">
+                      {p.fields.map(f => (
+                        <div key={f.key}>
+                          <label className="input-label">{f.label}</label>
+                          <input
+                            className="input"
+                            placeholder={f.placeholder}
+                            value={formData[f.key] || ''}
+                            onChange={e => setFormData(prev => ({ ...prev, [f.key]: e.target.value }))}
+                          />
+                        </div>
+                      ))}
+                      {saveError && (
+                        <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{saveError}</div>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handlePasteConnect(p.key)}
+                          disabled={saving || !formData.platform_account_id}
+                          className={clsx('btn-primary text-xs flex-1 justify-center', (!formData.platform_account_id) && 'opacity-40 cursor-not-allowed')}
+                        >
+                          {saving ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : 'Save connection'}
+                        </button>
+                        <button onClick={() => setExpandedPlatform(null)} className="btn-secondary text-xs">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
+            )
+          })}
+        </div>
 
-              {/* Match quality score */}
-              {result.success && result.match_quality_score !== undefined && (
-                <div className="bg-white rounded-lg p-3 border border-emerald-200 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Event Match Quality</span>
-                    <span className={clsx(
-                      'text-xs font-semibold px-2 py-0.5 rounded-full',
-                      result.match_quality_score >= 7 ? 'bg-emerald-100 text-emerald-700' :
-                      result.match_quality_score >= 4 ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
-                    )}>
-                      {result.match_quality_score >= 7 ? 'Excellent' :
-                       result.match_quality_score >= 4 ? 'Good' : 'Low'}
-                    </span>
-                  </div>
-                  <ScoreBar score={result.match_quality_score} />
-                  <p className="text-xs text-gray-400">
-                    Score of <strong className="text-gray-700">{result.match_quality_score}/10</strong> — higher scores improve ad delivery and attribution accuracy.
-                    {result.match_quality_score < 7 && ' Add more customer parameters (email, phone) to improve this score.'}
-                  </p>
-                </div>
-              )}
+        {/* ── Meta CAPI test console ─────────────────────────────────────── */}
+        <div>
+          <button
+            onClick={() => setShowTestConsole(p => !p)}
+            className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-700 font-medium"
+          >
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className={clsx('transition-transform', showTestConsole && 'rotate-90')}>
+              <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            Meta CAPI test console
+          </button>
 
-              {/* Diagnostics */}
-              {result.match_quality_diagnostics != null && Object.keys(result.match_quality_diagnostics).length > 0 ? (
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Signal diagnostics</p>
-                  {Object.entries(result.match_quality_diagnostics).map(([key, val]: [string, string]) => (
-                    <div key={key} className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600 capitalize">{key.replace(/_/g, ' ')}</span>
-                      <span className={clsx(
-                        'font-medium px-1.5 py-0.5 rounded',
-                        val === 'provided' ? 'bg-emerald-100 text-emerald-700' :
-                        val === 'hashed' ? 'bg-blue-100 text-blue-700' :
-                        'bg-gray-100 text-gray-500'
-                      )}>{val}</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {/* Key IDs */}
-              {result.success && (
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  {result.event_id && (
-                    <div>
-                      <p className="text-gray-400 mb-0.5">event_id</p>
-                      <code className="font-mono text-gray-700 bg-white px-1.5 py-0.5 rounded border border-emerald-100 text-[11px] break-all">
-                        {result.event_id}
-                      </code>
-                    </div>
-                  )}
-                  {result.fbtrace_id && (
-                    <div>
-                      <p className="text-gray-400 mb-0.5">fbtrace_id</p>
-                      <code className="font-mono text-gray-700 bg-white px-1.5 py-0.5 rounded border border-emerald-100 text-[11px] break-all">
-                        {result.fbtrace_id}
-                      </code>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Error message */}
-              {!result.success && result.error && (
-                <p className="text-sm text-red-700 font-mono bg-red-100 rounded-lg p-3">{result.error}</p>
-              )}
-
-              {/* Raw toggle */}
-              {result.raw_response != null ? (
+          {showTestConsole && (
+            <div className="card mt-3 space-y-4">
+              <p className="text-xs text-gray-400">Send a test event directly to Meta's Conversions API to verify your credentials work.</p>
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <button
-                    onClick={() => setShowRaw(p => !p)}
-                    className="text-xs text-gray-500 hover:text-gray-700 flex items-center gap-1"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none"
-                      className={clsx('transition-transform', showRaw && 'rotate-90')}>
-                      <path d="M3 2l4 3-4 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    {showRaw ? 'Hide' : 'Show'} raw response
-                  </button>
-                  {showRaw && (
-                    <pre className="mt-2 text-[11px] font-mono bg-gray-900 text-green-300 rounded-lg p-3 overflow-x-auto leading-relaxed">
-                      {JSON.stringify(result.raw_response, null, 2)}
-                    </pre>
-                  )}
+                  <label className="input-label">Pixel ID</label>
+                  <input className="input" placeholder="123456789012345" value={testCreds.pixel_id} onChange={e => setTestCreds(p => ({ ...p, pixel_id: e.target.value }))} />
                 </div>
-              ) : null}
+                <div>
+                  <label className="input-label">Test Event Code</label>
+                  <input className="input" placeholder="TEST12345 (optional)" value={testCreds.test_event_code} onChange={e => setTestCreds(p => ({ ...p, test_event_code: e.target.value }))} />
+                </div>
+              </div>
+              <div>
+                <label className="input-label">Access Token</label>
+                <input className="input" placeholder="EAAG..." value={testCreds.access_token} onChange={e => setTestCreds(p => ({ ...p, access_token: e.target.value }))} />
+              </div>
+              <button
+                onClick={handleMetaTestEvent}
+                disabled={testLoading || !testCreds.pixel_id || !testCreds.access_token}
+                className={clsx('btn-primary text-xs', (!testCreds.pixel_id || !testCreds.access_token) && 'opacity-40 cursor-not-allowed')}
+              >
+                {testLoading ? <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : 'Send test PageView'}
+              </button>
+
+              {testResult && (
+                <div className={clsx('rounded-xl border p-4', testResult.success ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200')}>
+                  <div className="flex items-center gap-2 text-sm font-semibold">
+                    {testResult.success ? (
+                      <span className="text-emerald-800">Event received</span>
+                    ) : (
+                      <span className="text-red-800">Event failed</span>
+                    )}
+                    {testResult.latency_ms && <span className="text-xs font-mono text-gray-500">{testResult.latency_ms}ms</span>}
+                  </div>
+                  {testResult.match_quality_score !== undefined && (
+                    <p className="text-xs text-gray-600 mt-2">Match quality: <strong>{testResult.match_quality_score}/10</strong></p>
+                  )}
+                  {testResult.error && <p className="text-xs text-red-700 mt-2 font-mono">{testResult.error}</p>}
+                  {testResult.event_id && <p className="text-[11px] text-gray-400 mt-2 font-mono">event_id: {testResult.event_id}</p>}
+                </div>
+              )}
             </div>
           )}
-        </section>
-
-        {/* ── Other platforms (coming soon) ──────────────────────────────── */}
-        <section>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Other platforms</p>
-          <div className="grid grid-cols-3 gap-3">
-            {[
-              { name: 'TikTok Events API', color: 'bg-purple-50 border-purple-100', icon: '📱' },
-              { name: 'Google Ads', color: 'bg-green-50 border-green-100', icon: '🎯' },
-              { name: 'LinkedIn CAPI', color: 'bg-blue-50 border-blue-100', icon: '💼' },
-            ].map(p => (
-              <div key={p.name} className={clsx('rounded-xl border p-4 opacity-60', p.color)}>
-                <div className="text-lg mb-2">{p.icon}</div>
-                <p className="text-xs font-medium text-gray-700">{p.name}</p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Coming soon</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        </div>
 
       </div>
     </div>
