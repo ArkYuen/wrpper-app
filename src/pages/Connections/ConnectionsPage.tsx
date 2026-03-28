@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/common/PageHeader'
 import { useAuth } from '../../context/AuthContext'
 import { apiFetch, apiPost, apiDelete } from '../../lib/api'
@@ -90,22 +91,42 @@ export default function ConnectionsPage() {
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
 
+  const [actionError, setActionError] = useState<Record<string, string>>({})
+
   // Meta test console state
   const [testCreds, setTestCreds] = useState({ pixel_id: '', access_token: '', test_event_code: '' })
   const [testResult, setTestResult] = useState<CapiTestResult | null>(null)
   const [testLoading, setTestLoading] = useState(false)
   const [showTestConsole, setShowTestConsole] = useState(false)
 
+  const [fetchError, setFetchError] = useState('')
+
   async function fetchConnections() {
     if (!org) return
     try {
+      setFetchError('')
       const data = await apiFetch<ApiConnection[]>(`/v1/orgs/${org.id}/connections`)
       setConnections(data)
-    } catch { /* ignore */ }
+    } catch (e: unknown) {
+      setFetchError(e instanceof Error ? e.message : 'Failed to load connections')
+    }
     setLoading(false)
   }
 
+  const [searchParams, setSearchParams] = useSearchParams()
+
   useEffect(() => { fetchConnections() }, [org])
+
+  // Re-fetch after OAuth redirect returns with success/connected param
+  useEffect(() => {
+    if (searchParams.has('connected') || searchParams.has('success')) {
+      fetchConnections()
+      // Clean up URL params
+      searchParams.delete('connected')
+      searchParams.delete('success')
+      setSearchParams(searchParams, { replace: true })
+    }
+  }, [searchParams])
 
   function getConnection(platform: string): ApiConnection | undefined {
     return connections.find(c => c.platform === platform && c.status !== 'disconnected')
@@ -119,6 +140,7 @@ export default function ConnectionsPage() {
       await apiPost(`/v1/orgs/${org.id}/connections/token`, {
         platform: platformKey,
         platform_account_id: formData.platform_account_id || '',
+        access_token: formData.access_token || '',
         platform_account_label: formData.platform_account_label || undefined,
         secondary_id: formData.secondary_id || undefined,
       })
@@ -138,19 +160,25 @@ export default function ConnectionsPage() {
 
   async function handleToggle(conn: ApiConnection) {
     if (!org) return
+    setActionError(prev => ({ ...prev, [conn.id]: '' }))
     try {
       await apiFetch(`/v1/orgs/${org.id}/connections/${conn.id}/toggle`, { method: 'PATCH' })
       await fetchConnections()
-    } catch { /* ignore */ }
+    } catch (e: unknown) {
+      setActionError(prev => ({ ...prev, [conn.id]: e instanceof Error ? e.message : 'Toggle failed' }))
+    }
   }
 
   async function handleDisconnect(conn: ApiConnection) {
     if (!org) return
     if (!confirm(`Disconnect ${conn.platform}? This will remove the access token.`)) return
+    setActionError(prev => ({ ...prev, [conn.id]: '' }))
     try {
       await apiDelete(`/v1/orgs/${org.id}/connections/${conn.id}`)
       await fetchConnections()
-    } catch { /* ignore */ }
+    } catch (e: unknown) {
+      setActionError(prev => ({ ...prev, [conn.id]: e instanceof Error ? e.message : 'Disconnect failed' }))
+    }
   }
 
   async function handleMetaTestEvent() {
@@ -186,6 +214,10 @@ export default function ConnectionsPage() {
       />
 
       <div className="px-6 pb-10 space-y-6 max-w-4xl">
+
+        {fetchError && (
+          <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{fetchError}</div>
+        )}
 
         {/* ── Platform grid ──────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 gap-3">
@@ -247,6 +279,9 @@ export default function ConnectionsPage() {
                         Disconnect
                       </button>
                     </div>
+                    {actionError[conn.id] && (
+                      <div className="px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700">{actionError[conn.id]}</div>
+                    )}
                   </>
                 )}
 
