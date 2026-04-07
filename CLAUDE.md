@@ -294,8 +294,8 @@ npm run build        # Must pass with zero TS errors
 
 ## CORS
 
-Backend allows: `localhost:3000`, `localhost:5173`, `app.wrpper.com`,
-`stackfluence.vercel.app`. Update backend CORS if using a different local port.
+Backend allows: `localhost:3000`, `localhost:5173`, `app.wrpper.com`.
+Update backend CORS if using a different local port.
 
 ---
 
