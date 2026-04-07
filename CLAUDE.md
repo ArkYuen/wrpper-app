@@ -8,32 +8,24 @@ Read it in full before doing anything.
 ## What This Is
 
 The React dashboard for **Wrpper** — a server-side CAPI attribution platform for
-influencer marketing. Advertisers use this dashboard to:
-
-1. **Connect ad platforms** (Meta, TikTok, LinkedIn, Snapchat, Reddit, Pinterest, GA4)
-2. **View attribution data** — clicks, conversions, revenue, per-creator performance
-3. **Manage links** — create wrapped links for creators
-4. **Install the pixel** — get wrp.js snippet for their site
-
-The backend (FastAPI at `api.wrpper.com`) is fully built. This frontend needs to be
-wired to it. Most pages currently have hardcoded mock data.
+influencer marketing. The backend (FastAPI at `api.wrpper.com`, repo: `ArkYuen/wrpper`)
+is fully built. This frontend is deployed at `app.wrpper.com`.
 
 ---
 
 ## Stack
 
-| Layer        | Tech                              |
-|--------------|-----------------------------------|
-| Framework    | React 18 + TypeScript             |
-| Router       | react-router-dom v6               |
-| Styling      | Tailwind CSS 3.4                  |
-| Auth         | Supabase Auth (@supabase/supabase-js) |
-| Charts       | Recharts 2.10                     |
-| Build        | Vite 5                            |
-| Deploy       | Vercel (or Railway static)        |
-| API          | `https://api.wrpper.com`          |
+| Layer | Tech |
+|---|---|
+| Framework | React 18 + TypeScript |
+| Router | react-router-dom v6 |
+| Styling | Tailwind CSS 3.4 |
+| Auth | Supabase Auth (@supabase/supabase-js 2.39) |
+| Charts | Recharts 2.10 (installed, not yet used) |
+| Build | Vite 5 |
+| API | `https://api.wrpper.com` |
 
-Brand color is purple — `brand-600: #6d38e0`. Font is Inter + JetBrains Mono.
+Brand color: purple `#6d38e0`. Font: Inter + JetBrains Mono.
 
 ---
 
@@ -41,352 +33,252 @@ Brand color is purple — `brand-600: #6d38e0`. Font is Inter + JetBrains Mono.
 
 ```
 VITE_SUPABASE_URL=https://rsxxfkbnlrxxnqcnxblz.supabase.co
-VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzeHhma2JubHJ4eG5xY254Ymx6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4NTE4MzgsImV4cCI6MjA4NjQyNzgzOH0.9LGRAI7IwvjTbnUThxKjvZI6M9PjRTDqKNEy2mWavCQ
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 VITE_API_BASE_URL=https://api.wrpper.com
 ```
 
 ---
 
-## Auth Flow
+## Auth Flow (DONE — do not rebuild)
 
-Supabase handles auth. The backend validates the JWT server-side.
-
-1. `supabase.auth.signInWithPassword()` or `supabase.auth.signInWithOAuth()`
-2. Supabase returns a session with `access_token`
-3. Every API call includes `Authorization: Bearer <access_token>` (handled by `src/lib/api.ts`)
-4. Backend validates token with Supabase, auto-creates Organization + User on first login
-5. `AppLayout` checks `useAuth().session` — if null, redirects to `/signin`
-
-**The `organization_id` is needed for most API calls.** Get it from `GET /v1/dashboard/me`:
-```json
-{
-  "user": { "id": "...", "email": "...", "full_name": "..." },
-  "organization": { "id": "uuid-here", "name": "...", "slug": "..." }
-}
-```
-
-Store `organization_id` in AuthContext or a dedicated hook so it's available everywhere.
+1. `supabase.auth.signInWithPassword()` or `signInWithOAuth({ provider: 'google' })`
+2. Supabase returns session with `access_token`
+3. `src/lib/api.ts` auto-injects `Authorization: Bearer <token>` on every API call
+4. Backend validates JWT, auto-creates Organization + User on first login
+5. `AuthContext` fetches `/v1/dashboard/me` to get `org_id`, stores it in context
+6. `AppLayout` checks `useAuth().session` — redirects to `/signin` if null
 
 ---
 
-## Design Rules
+## File Structure
 
-- Use existing CSS classes: `card`, `btn-primary`, `btn-secondary`, `btn-danger`, `input`, `input-label`, `badge-live`, `badge-warn`, `badge-error`, `badge-idle`
-- Tailwind only — no external CSS. No CSS modules.
-- `clsx` for conditional classes (already installed)
-- No emoji in UI — use inline SVGs (look at Sidebar.tsx for the pattern)
-- Monospace for IDs, codes, technical values: `font-mono`
-- Tables: `text-sm`, `text-xs` headers, thin `border-gray-100` dividers
-- Loading spinner pattern: `<span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />`
-- Empty states: gray text centered, 1-2 lines, optional CTA button
-- Error states: `bg-red-50 border border-red-200 rounded-lg text-xs text-red-700`
+```
+src/
+├── App.tsx                    # Routes
+├── main.tsx                   # Entry point
+├── index.css                  # Tailwind + global styles
+├── context/
+│   └── AuthContext.tsx         # Session + org state, Google OAuth
+├── lib/
+│   ├── api.ts                 # apiFetch, apiPost, apiDelete with auth
+│   └── supabase.ts            # Supabase client
+├── components/
+│   ├── AppLayout.tsx           # Protected route wrapper (sidebar + outlet)
+│   ├── Sidebar.tsx             # Nav sidebar with 5 links
+│   └── PageHeader.tsx          # Reusable page header
+├── pages/
+│   ├── AuthPages/
+│   │   ├── SignInPage.tsx      # Email + Google OAuth
+│   │   ├── SignUpPage.tsx      # Email + Google OAuth
+│   │   └── ResetPasswordPage.tsx
+│   ├── Dashboard/
+│   │   └── DashboardPage.tsx   # KPIs, CAPI strip, conversion breakdown
+│   ├── Connections/
+│   │   └── ConnectionsPage.tsx # 7-platform grid, OAuth + paste-token, test console
+│   ├── Analytics/
+│   │   └── AnalyticsPage.tsx   # Click events table with pagination
+│   ├── Influencers/
+│   │   └── InfluencersPage.tsx # Creator leaderboard
+│   └── Settings/
+│       └── SettingsPage.tsx    # Account, org, pub key, pixel snippet
+└── types/
+    └── index.ts               # API response types
+```
+
+---
+
+## What's DONE (do not rebuild)
+
+Every core page is wired to live API data. Do NOT replace with mock data.
+
+| Page | API Endpoints Used | Status |
+|---|---|---|
+| **SignInPage** | Supabase Auth (email + Google OAuth) | LIVE |
+| **SignUpPage** | Supabase Auth (email + Google OAuth) | LIVE |
+| **ResetPasswordPage** | Supabase `resetPasswordForEmail()` | LIVE |
+| **DashboardPage** | `/v1/dashboard/summary`, `/v1/dashboard/conversions`, `/v1/orgs/{id}/connections` | LIVE |
+| **ConnectionsPage** | `/v1/orgs/{id}/connections`, `/v1/orgs/{id}/connections/token`, toggle, delete, OAuth redirects, Meta test console | LIVE |
+| **AnalyticsPage** | `/v1/dashboard/clicks?page=&per_page=50` with pagination | LIVE |
+| **InfluencersPage** | `/v1/dashboard/creators?days=30` | LIVE |
+| **SettingsPage** | `/v1/dashboard/me`, `/v1/dashboard/publishable-key`, `/v1/dashboard/pixel-snippet` | LIVE |
+
+**AuthContext** stores `org.id`, `org.name`, `org.slug` from `/v1/dashboard/me`.
+All pages use this for org-scoped API calls.
 
 ---
 
 ## API Client
 
 `src/lib/api.ts` provides:
-- `apiFetch<T>(path, options)` — GET with auth headers
-- `apiPost<T>(path, body)` — POST with auth headers
-- `apiDelete(path)` — DELETE with auth headers
+- `apiFetch<T>(path)` — GET with Bearer token
+- `apiPost<T>(path, body)` — POST with Bearer token
+- `apiDelete(path)` — DELETE with Bearer token
 
-All paths are relative to `VITE_API_BASE_URL` (default `https://api.wrpper.com`).
-
----
-
-## TASK 1: Wire Dashboard to Live Data
-
-**File:** `src/pages/Dashboard/DashboardPage.tsx`
-
-Currently all hardcoded. Replace with live API calls.
-
-### Backend Endpoints (all require Bearer token)
-
-**GET /v1/dashboard/me**
-```json
-{
-  "user": { "id": "", "email": "", "full_name": "" },
-  "organization": { "id": "org-uuid", "name": "Acme", "slug": "org-abc123" }
-}
-```
-
-**GET /v1/dashboard/summary?days=30**
-```json
-{
-  "total_clicks": 1204,
-  "bots_filtered": 31,
-  "unique_visitors": 892,
-  "pct_change": 18.3,
-  "period_days": 30
-}
-```
-
-**GET /v1/dashboard/conversions?days=30**
-```json
-{
-  "total_clicks": 1204,
-  "total_conversions": 84,
-  "total_revenue_cents": 412300,
-  "total_refunds": 2,
-  "total_refund_cents": 5999,
-  "net_revenue_cents": 406301,
-  "conversion_rate": 6.97,
-  "refund_rate": 2.38,
-  "by_type": [
-    { "event_type": "purchase", "count": 60, "revenue_cents": 380000 },
-    { "event_type": "add_to_cart", "count": 24, "revenue_cents": 32300 }
-  ],
-  "period_days": 30
-}
-```
-
-**GET /v1/dashboard/platforms?days=30**
-Returns `[{ "source_platform": "tiktok", "count": 500 }, ...]`
-
-**GET /v1/dashboard/devices?days=30**
-Returns `[{ "device_class": "mobile", "count": 800 }, ...]`
-
-**GET /v1/dashboard/creators?days=30**
-Returns per-creator stats with clicks, conversions, revenue, refunds.
-
-**GET /v1/dashboard/clicks?page=1&per_page=50**
-Paginated click events table.
-
-### Implementation Notes
-
-- Fetch on mount with `useEffect`. Show loading spinner while fetching.
-- CAPI health strip: replace mocks with `GET /v1/orgs/{org_id}/connections` (see Task 2). Show real connection status, `total_events_fired`, `enabled` state.
-- KPI row: map from `/summary` + `/conversions` responses.
-- Revenue display: backend returns cents — divide by 100 and format as currency.
-- Empty state: if no clicks yet, show setup CTA pointing to Settings (pixel install).
+Base URL from `VITE_API_BASE_URL`. Auth token auto-injected from Supabase session.
 
 ---
 
-## TASK 2: Connections UI — All Platforms
+## Design Rules
 
-**File:** `src/pages/Connections/ConnectionsPage.tsx`
-
-Currently only a Meta test console. Rebuild as a full multi-platform connections manager.
-
-### Backend Endpoints
-
-**GET /v1/orgs/{org_id}/connections**
-Returns array of `ConnectionOut`:
-```json
-{
-  "id": "uuid",
-  "platform": "meta",
-  "status": "active",
-  "auth_type": "token",
-  "platform_account_id": "pixel-id-here",
-  "platform_account_label": "My Meta Pixel",
-  "secondary_id": "test-event-code",
-  "enabled": true,
-  "total_events_fired": 14302,
-  "last_event_at": "2026-03-23T...",
-  "last_event_status": "success",
-  "token_expires_at": null,
-  "refresh_fail_count": 0,
-  "created_at": "2026-03-01T..."
-}
-```
-
-**POST /v1/orgs/{org_id}/connections/token** (paste-token platforms: meta, snapchat, reddit, pinterest)
-```json
-{
-  "platform": "meta",
-  "platform_account_id": "pixel-id",
-  "platform_account_label": "My Pixel",
-  "secondary_id": "test_event_code_or_api_secret"
-}
-```
-
-**PATCH /v1/orgs/{org_id}/connections/{id}/toggle** — toggles `enabled`
-
-**DELETE /v1/orgs/{org_id}/connections/{id}** — disconnects
-
-**OAuth platforms** (tiktok, linkedin, google):
-- Redirect user to: `GET /v1/oauth/{platform}/connect?org_id={org_id}`
-- Backend handles the full OAuth dance and redirects back
-- After OAuth callback, connection appears in the list
-
-**POST /connections/meta/verify** — verify Meta token (existing)
-**POST /connections/meta/test-event** — send test event (existing)
-
-### UI Design
-
-Build a **platform grid** at the top showing all 7 platforms as cards:
-
-| Platform  | Auth Type  | Credential Fields                                    |
-|-----------|-----------|------------------------------------------------------|
-| Meta      | paste     | Pixel ID + Access Token + Test Event Code (optional) |
-| TikTok    | oauth     | → redirects to TikTok auth                           |
-| LinkedIn  | oauth     | → redirects to LinkedIn auth                         |
-| Google    | oauth     | → redirects to Google auth (GA4 + Ads)               |
-| Snapchat  | paste     | Pixel ID + Access Token                              |
-| Reddit    | paste     | Pixel ID + Access Token                              |
-| Pinterest | paste     | Ad Account ID + Access Token                         |
-
-Each platform card shows:
-- Platform name + icon
-- Status badge (live / disconnected / expiring)
-- Events fired count
-- Connect / Disconnect button
-- Enable/disable toggle (for connected platforms)
-
-When "Connect" is clicked on a **paste-token** platform:
-- Expand or modal with credential input fields
-- Verify button (for Meta, use existing /verify endpoint)
-- Save button → POST to `/v1/orgs/{org_id}/connections/token`
-
-When "Connect" is clicked on an **OAuth** platform:
-- `window.location.href = API + '/v1/oauth/{platform}/connect?org_id=' + orgId`
-- User completes OAuth externally, gets redirected back
-- On return, re-fetch connections list to see the new connection
-
-Keep the existing **Meta CAPI test console** as a collapsible section below the grid —
-it's useful for debugging.
-
-### Platform Visual Config
-```ts
-const PLATFORMS = {
-  meta:      { name: 'Meta',      color: 'blue',   auth: 'paste' },
-  tiktok:    { name: 'TikTok',    color: 'purple', auth: 'oauth' },
-  linkedin:  { name: 'LinkedIn',  color: 'blue',   auth: 'oauth' },
-  google:    { name: 'Google',    color: 'green',  auth: 'oauth' },
-  snapchat:  { name: 'Snapchat',  color: 'amber',  auth: 'paste' },
-  reddit:    { name: 'Reddit',    color: 'coral',  auth: 'paste' },
-  pinterest: { name: 'Pinterest', color: 'red',    auth: 'paste' },
-}
-```
+- Tailwind only — no CSS modules, no external CSS
+- Existing CSS classes: `card`, `btn-primary`, `btn-secondary`, `btn-danger`, `input`, `input-label`, `badge-live`, `badge-warn`, `badge-error`, `badge-idle`
+- `clsx` for conditional classes
+- No emoji in UI — use inline SVGs (see Sidebar.tsx for pattern)
+- Monospace for IDs/codes: `font-mono`
+- Tables: `text-sm`, `text-xs` headers, thin `border-gray-100` dividers
+- Loading spinner: `<span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />`
+- Empty states: gray text centered, 1-2 lines, optional CTA
+- Error states: `bg-red-50 border border-red-200 rounded-lg text-xs text-red-700`
+- Format currency from cents: `(cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })`
+- Format dates: `date-fns` — `format(new Date(iso), 'MMM d, h:mm a')`
 
 ---
 
-## TASK 3: Auth Flow Polish
+## REMAINING TASKS — in priority order
 
-### 3a. Store org_id globally
+### TASK 1: Billing / Subscription UI
+**Priority: HIGH — users can't subscribe without this**
 
-Create `src/hooks/useOrg.ts` or extend `AuthContext` to:
-1. After login, call `GET /v1/dashboard/me`
-2. Store `organization_id` and `organization_name` in context
-3. Expose via `useOrg()` hook
-4. All pages that need `org_id` use this hook instead of hardcoding
+The backend has Stripe checkout (`POST /v1/billing/checkout-session`) and status
+(`GET /v1/billing/status`). The frontend needs a way to:
 
-### 3b. Google OAuth Sign-In (Supabase)
+**What to do:**
+1. Create `src/pages/Billing/BillingPage.tsx` (or add a section to SettingsPage)
+2. Show current subscription status from `GET /v1/billing/status`:
+   - Plan name, status (active/past_due/canceled/trialing), current period end
+   - If no subscription: show plan selection cards
+3. Plan selection:
+   - Creator plan (monthly/annual) and Agency plan (monthly/annual)
+   - "Subscribe" button calls `POST /v1/billing/checkout-session` with `{ plan: "creator", interval: "monthly" }`
+   - Backend returns `{ checkout_url }` → redirect user to Stripe Checkout
+4. After checkout, Stripe redirects back to `app.wrpper.com/settings?billing=success`
+5. Add "Manage Billing" button that opens Stripe Customer Portal (if backend supports it)
+6. Add route in `App.tsx`: `/billing` or nest under `/settings`
+7. Add nav link in `Sidebar.tsx`
 
-In `SignInPage.tsx` and `SignUpPage.tsx`, add a "Continue with Google" button:
-
-```ts
-async function handleGoogleSignIn() {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: { redirectTo: window.location.origin }
-  })
-  if (error) setError(error.message)
-}
-```
-
-This is Supabase-side Google OAuth for *sign-in*. It's separate from the Google OAuth
-in Connections (which connects the advertiser's Google Ads/GA4 account for CAPI).
-
-### 3c. Sign-in page improvements
-
-- Add "Continue with Google" divider + button above the email form
-- Add "Forgot password?" link (use `supabase.auth.resetPasswordForEmail()`)
-- After signup, if email confirmation is required, show a check-your-email state (already exists)
-
-### 3d. Password reset page
-
-Create `src/pages/AuthPages/ResetPasswordPage.tsx`:
-- Input for email
-- Calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: origin + '/signin' })`
-- Shows success state
-
-Add route in `App.tsx`: `<Route path="reset-password" element={<ResetPasswordPage />} />`
+**Files:** New page, `App.tsx`, `Sidebar.tsx`, `types/index.ts`
 
 ---
 
-## TASK 4: Settings Page — Pixel Snippet + API Keys
+### TASK 2: Link Builder / Wrapped Link Creation
+**Priority: HIGH — core product feature, not yet in frontend**
 
-**File:** `src/pages/Settings/SettingsPage.tsx`
+The backend has `POST /v1/links` and `POST /v1/links/quick` for creating wrapped
+links. The frontend has no UI for this.
 
-### Wire pixel snippet
+**What to do:**
+1. Create `src/pages/Links/LinksPage.tsx`
+2. List existing links from `GET /v1/links` (if endpoint exists) or build into dashboard
+3. "Create Link" form:
+   - Creator handle (text input)
+   - Campaign slug (text input)
+   - Destination URL (text input, required)
+   - Optional: asset slug, deep link overrides, UTM overrides
+4. Submit to `POST /v1/links/quick` (simpler) or `POST /v1/links`:
+   ```json
+   {
+     "creator_handle": "...",
+     "campaign_slug": "...",
+     "destination_url": "https://...",
+   }
+   ```
+5. On success, show the wrapped link: `https://api.wrpper.com/c/{creator}/{campaign}`
+6. Copy-to-clipboard button for the generated link
+7. Add route `/links` in `App.tsx` and nav link in `Sidebar.tsx`
 
-Replace the hardcoded snippet with a live call:
-
-**GET /v1/dashboard/pixel-snippet**
-```json
-{
-  "snippet": "<script src=\"https://api.wrpper.com/static/wrp.js\" data-key=\"wrp_pub_org-abc\" data-org=\"org-uuid\"></script>",
-  "org_id": "org-uuid",
-  "pub_key": "wrp_pub_org-abc",
-  "pixel_url": "https://api.wrpper.com/static/wrp.js",
-  "instructions": "Add this script tag..."
-}
-```
-
-Show the snippet in a code block with a "Copy" button.
-
-### Wire user/org data
-
-Use `GET /v1/dashboard/me` to populate account email, user ID, org name.
-
----
-
-## File Structure After Changes
-
-```
-src/
-├── App.tsx                         # Add reset-password route
-├── context/
-│   └── AuthContext.tsx              # Extend with org_id, org_name
-├── lib/
-│   ├── api.ts                      # No changes needed
-│   └── supabase.ts                 # No changes needed
-├── hooks/
-│   └── useOrg.ts                   # NEW — org context hook (or merge into AuthContext)
-├── pages/
-│   ├── AuthPages/
-│   │   ├── SignInPage.tsx           # Add Google OAuth + forgot password
-│   │   ├── SignUpPage.tsx           # Add Google OAuth
-│   │   └── ResetPasswordPage.tsx   # NEW
-│   ├── Dashboard/
-│   │   └── DashboardPage.tsx       # Wire to live API
-│   ├── Connections/
-│   │   └── ConnectionsPage.tsx     # Full multi-platform rebuild
-│   ├── Analytics/
-│   │   └── AnalyticsPage.tsx       # Wire to /dashboard/clicks, /platforms, /devices
-│   ├── Influencers/
-│   │   └── InfluencersPage.tsx     # Wire to /dashboard/creators
-│   └── Settings/
-│       └── SettingsPage.tsx        # Wire pixel snippet + user data
-└── types/
-    └── index.ts                    # Add new API response types
-```
+**Files:** New page, `App.tsx`, `Sidebar.tsx`, `types/index.ts`
 
 ---
 
-## Execution Order
+### TASK 3: Charts / Data Visualization
+**Priority: MEDIUM — Recharts is installed but unused**
 
-1. **AuthContext + useOrg** — everything depends on having `org_id`
-2. **Dashboard** — most visible, proves the API wiring works
-3. **Connections** — biggest feature, unlocks the product
-4. **Auth polish** — Google OAuth, reset password
-5. **Settings** — pixel snippet, org data
+`recharts` is in `package.json` but no charts are rendered. The dashboard shows
+KPI cards and tables but no visual trends.
+
+**What to do:**
+1. Add a clicks-over-time line chart to `DashboardPage.tsx`:
+   - Backend may need a timeseries endpoint (`/v1/dashboard/clicks-timeseries?days=30`)
+   - If it doesn't exist, group the paginated clicks data client-side by day
+   - Use `<LineChart>` from recharts with brand purple stroke
+2. Add a platform breakdown pie/bar chart:
+   - Data from `/v1/dashboard/platforms?days=30` (if endpoint exists)
+   - Or from `/v1/dashboard/sources` (already called on dashboard)
+3. Add a conversion funnel visualization:
+   - Clicks → Sessions → Conversions → Revenue
+   - Data already available from summary + conversions endpoints
+4. Style charts to match brand (purple palette, Inter font, dark text)
+
+**Files:** `DashboardPage.tsx`, potentially `AnalyticsPage.tsx`
+
+---
+
+### TASK 4: Date Range Selector
+**Priority: MEDIUM — currently hardcoded to 30 days**
+
+All dashboard/analytics API calls use `?days=30`. Users should be able to pick
+different time ranges.
+
+**What to do:**
+1. Create a reusable `<DateRangeSelector>` component with options:
+   - 7 days, 14 days, 30 days (default), 90 days, All time
+   - Optional: custom date range picker
+2. Store selected range in state (or URL query params for shareability)
+3. Pass `days` param to all dashboard API calls
+4. Apply to: DashboardPage, AnalyticsPage, InfluencersPage
+5. Keep it simple — a dropdown/button group, not a full calendar widget
+
+**Files:** New component, `DashboardPage.tsx`, `AnalyticsPage.tsx`, `InfluencersPage.tsx`
+
+---
+
+### TASK 5: Team / Member Management
+**Priority: LOW — single-user works for now**
+
+The backend supports org membership with roles (owner/admin/member). The frontend
+has no team management UI.
+
+**What to do:**
+1. Create `src/pages/Team/TeamPage.tsx` (or section in Settings)
+2. List org members from backend (endpoint TBD — may need backend work first)
+3. Invite member form (email + role)
+4. Role management (change role, remove member)
+5. Backend endpoints needed:
+   - `GET /v1/orgs/{org_id}/members`
+   - `POST /v1/orgs/{org_id}/members/invite`
+   - `PATCH /v1/orgs/{org_id}/members/{user_id}`
+   - `DELETE /v1/orgs/{org_id}/members/{user_id}`
+6. **Check if these backend endpoints exist first** — if not, this is blocked on backend work
+
+**Files:** New page, `App.tsx`, `Sidebar.tsx`
+
+---
+
+### TASK 6: Error Handling & Loading States Polish
+**Priority: LOW — works but rough edges**
+
+Some pages have `.catch(() => {})` or minimal error handling.
+
+**What to do:**
+1. Audit all pages for silent error swallowing
+2. Add user-visible error states using the existing error pattern:
+   `bg-red-50 border border-red-200 rounded-lg text-xs text-red-700`
+3. Add retry buttons on failed API calls where appropriate
+4. Ensure all loading states use the standard spinner pattern
+5. Add a global error boundary component
+
+**Files:** All page files
 
 ---
 
 ## Code Conventions
 
-- Functional components only. No class components.
-- `useState` + `useEffect` for data fetching (no React Query — keep it simple).
-- Type all API responses in `src/types/index.ts`.
-- Error handling: try/catch in async handlers, display in component state.
-- Format currency from cents: `(cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })`
-- Format dates with `date-fns`: `format(new Date(iso), 'MMM d, h:mm a')`
-- Loading states: use the existing spinner pattern inline.
-- No `console.log` in committed code.
-- Prefer early returns over nested ternaries.
+- Functional components only, no class components
+- `useState` + `useEffect` for data fetching (no React Query)
+- Type all API responses in `src/types/index.ts`
+- Error handling: try/catch in async handlers, display in component state
+- No `console.log` in committed code
+- Prefer early returns over nested ternaries
 
 ---
 
@@ -394,25 +286,21 @@ src/
 
 ```bash
 npm install
-npm run dev
-# Opens at http://localhost:5173
-# Make sure VITE_ env vars are set in .env
-```
-
-Build check:
-```bash
-npm run build
-# Must pass with zero TS errors
+npm run dev          # http://localhost:5173
+npm run build        # Must pass with zero TS errors
 ```
 
 ---
 
-## CORS Note
+## CORS
 
-The backend allows these origins:
-- `http://localhost:3000`
-- `http://localhost:5173`
-- `https://stackfluence.vercel.app`
-- `https://app.wrpper.com`
+Backend allows: `localhost:3000`, `localhost:5173`, `app.wrpper.com`,
+`stackfluence.vercel.app`. Update backend CORS if using a different local port.
 
-If you're on a different port locally, you may need to update CORS on the backend.
+---
+
+## Companion Repo
+
+The backend lives at `github.com/ArkYuen/wrpper` (private). It has its own CLAUDE.md
+with backend-specific tasks. Some frontend tasks (billing UI, team management) may
+require new backend endpoints — check that repo first.
