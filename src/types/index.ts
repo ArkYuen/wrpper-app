@@ -136,3 +136,9 @@ export interface CapiTestPayload {
   value?: number
   currency?: string
 }
+
+export interface BillingStatus {
+  subscription_status: 'active' | 'past_due' | 'canceled' | 'none'
+  subscription_plan: string | null
+  current_period_end: string | null
+}

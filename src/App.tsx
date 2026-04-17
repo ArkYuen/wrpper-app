@@ -6,6 +6,7 @@ import ConnectionsPage from './pages/Connections/ConnectionsPage'
 import AnalyticsPage from './pages/Analytics/AnalyticsPage'
 import InfluencersPage from './pages/Influencers/InfluencersPage'
 import SettingsPage from './pages/Settings/SettingsPage'
+import BillingPage from './pages/Billing/BillingPage'
 import SignInPage from './pages/AuthPages/SignInPage'
 import SignUpPage from './pages/AuthPages/SignUpPage'
 import ResetPasswordPage from './pages/AuthPages/ResetPasswordPage'
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="connections" element={<ConnectionsPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="influencers" element={<InfluencersPage />} />
+            <Route path="billing" element={<BillingPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

@@ -52,6 +52,17 @@ const NAV = [
     ),
   },
   {
+    label: 'Billing',
+    path: '/billing',
+    icon: (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+        <path d="M1 6.5h14" stroke="currentColor" strokeWidth="1.3"/>
+        <path d="M4 10h3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+      </svg>
+    ),
+  },
+  {
     label: 'Settings',
     path: '/settings',
     icon: (
